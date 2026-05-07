@@ -1,0 +1,12 @@
+{
+  "name": "نظام ISA2 للتحليل",
+  "short_name": "ISA2",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "icons": [{
+    "src": "icon.png",
+    "sizes": "512x512",
+    "type": "image/png"
+  }]
+}

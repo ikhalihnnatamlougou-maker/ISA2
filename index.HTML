@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<link rel="manifest" href="manifest.json">
+    <meta charset="UTF-8">
+    <title>نظام ISA2  - مؤشر التحكم-</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap');
+        body { font-family: 'Tajawal', sans-serif; background: #f1f5f9; }
+        
+        /* تنسيق الواجهة */
+        .dashboard-card { background: white; border-radius: 1rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); border: 1px solid #e2e8f0; }
+        .ui-table th { background: #f8fafc; padding: 12px; text-align: right; color: #64748b; border-bottom: 2px solid #e2e8f0; }
+        .ui-table td { padding: 10px; border-bottom: 1px solid #f1f5f9; }
+
+        /* تنسيق الـ PDF الصارم لمنع التداخل */
+        #pdf-content { background: #ccc; }
+        .pdf-page { 
+            width: 210mm; 
+            height: 296.5mm; 
+            padding: 15mm 20mm; 
+            margin: 0 auto;
+            background: white; 
+            box-sizing: border-box;
+            page-break-after: always; /* فصل الصفحات */
+            overflow: hidden;
+            position: relative;
+        }
+        .pdf-header { border-bottom: 3px solid #1e293b; padding-bottom: 10px; text-align: center; margin-bottom: 25px; }
+        .pdf-section-title { font-size: 14pt; font-weight: 900; color: #1e293b; background: #f1f5f9; padding: 5px 10px; border-right: 5px solid #2563eb; margin: 20px 0 10px 0; }
+        .pdf-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        .pdf-table th { background: #f1f5f9; border: 1px solid #cbd5e1; padding: 8px; font-size: 10pt; font-weight: bold; }
+        .pdf-table td { border: 1px solid #cbd5e1; padding: 7px; font-size: 10pt; text-align: center; }
+        
+        .badge { padding: 3px 10px; border-radius: 5px; color: white; font-size: 0.8rem; font-weight: bold; }
+        .badge-A { background: #059669; } .badge-B { background: #2563eb; }
+        .badge-C { background: #d97706; } .badge-D { background: #dc2626; }
+
+        @media print { .no-print { display: none; } }
+    </style>
+</head>
+<body class="p-4 md:p-10">
+
+    <div class="max-w-7xl mx-auto no-print">
+        <header class="bg-slate-900 text-white p-10 rounded-[2.5rem] shadow-2xl text-center mb-10 border-b-8 border-blue-600">
+            <h1 class="text-4xl font-black mb-3">نظام مؤشر التفوق   </h1>
+            <p class="text-blue-300 text-xl font-bold">تحليل مستويات التحكم في الكفايات</p>
+            <div class="mt-8 flex flex-wrap justify-center gap-5">
+                <input type="file" id="fileInput" class="hidden" multiple accept=".xlsx">
+                <button onclick="document.getElementById('fileInput').click()" class="bg-blue-600 hover:bg-blue-500 px-10 py-4 rounded-2xl font-black transition-all shadow-xl hover:scale-105 active:scale-95">📥 رفع الملفات</button>
+                <button id="downloadPdfBtn" class="hidden bg-emerald-600 hover:bg-emerald-500 px-10 py-4 rounded-2xl font-black shadow-xl transition-all hover:scale-105">📄 تحميل التقرير </button>
+            </div>
+        </header>
+
+        <div id="mainDashboard" class="hidden space-y-10 animate-in fade-in duration-700">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div class="dashboard-card p-8 border-t-4 border-blue-600 text-center">
+                    <p class="text-slate-400 font-bold mb-1">المؤشر ISA2</p>
+                    <h2 id="isaVal" class="text-4xl font-black text-blue-600">0%</h2>
+                </div>
+                <div class="dashboard-card p-8 border-t-4 border-emerald-500 text-center">
+                    <p class="text-slate-400 font-bold mb-1">عدد التلاميذ</p>
+                    <h2 id="countVal" class="text-4xl font-black text-slate-800">0</h2>
+                </div>
+                <div class="dashboard-card p-8 border-t-4 border-orange-500 text-center">
+                    <p class="text-slate-400 font-bold mb-1">نسبة التميز</p>
+                    <h2 id="aRate" class="text-4xl font-black text-orange-500">0%</h2>
+                </div>
+                <div class="dashboard-card p-8 border-t-4 border-purple-600 text-center">
+                    <p class="text-slate-400 font-bold mb-1">المادة</p>
+                    <h2 id="subjName" class="text-xl font-black text-purple-700">-</h2>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="dashboard-card p-8">
+                    <h3 class="font-black text-slate-700 mb-6 border-b-2 pb-3 flex items-center gap-2"><span>📊</span> مبيان التحكم في الكفاية </h3>
+                    <div class="h-80"><canvas id="compChart"></canvas></div>
+                </div>
+                <div class="dashboard-card p-8">
+                    <h3 class="font-black text-slate-700 mb-6 border-b-2 pb-3 flex items-center gap-2"><span>🎯</span> توزيع ميزات المتعلمين</h3>
+                    <div class="h-80"><canvas id="pieChart"></canvas></div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="dashboard-card overflow-hidden">
+                    <div class="bg-emerald-600 text-white p-5 font-black text-lg">🏆 لوائح المتفوقين (A و B) </div>
+                    <div class="p-4 max-h-[400px] overflow-y-auto"><table class="ui-table w-full" id="ui-top-table"><thead><tr><th>الاسم</th><th>المعدل</th><th>الميزة</th></tr></thead><tbody></tbody></table></div>
+                </div>
+                <div class="dashboard-card overflow-hidden">
+                    <div class="bg-rose-600 text-white p-5 font-black text-lg">🚩 لوائح المتعثرين (C و D) </div>
+                    <div class="p-4 max-h-[400px] overflow-y-auto"><table class="ui-table w-full" id="ui-fail-table"><thead><tr><th>الاسم</th><th>المعدل</th><th>الميزة</th></tr></thead><tbody></tbody></table></div>
+                </div>
+            </div>
+        </div>
+
+        <footer class="mt-16 text-center border-t-2 border-slate-200 pt-8 pb-12">
+            <p class="text-slate-500 font-black text-lg">جميع الحقوق محفوظة-مدرسة الريادة - تملوكو اخلهنا - 2026 ©</p>
+        </footer>
+    </div>
+
+    <div id="pdf-content" style="display: none;">
+        <div class="pdf-page" id="pdf-p1">
+            <div class="pdf-header">
+                <h1 style="font-size: 22pt; font-weight: 900; margin: 0; color: #1e293b;">تقرير تحليل بيانات المتعلمين</h1>
+                <p style="font-size: 12pt; color: #475569; margin: 5px 0;">مدرسة الريادة | <span id="pdf-subj-display" style="font-weight: bold;"></span></p>
+            </div>
+            
+            <div class="pdf-section-title">أولاً: مؤشرات الأداء العام</div>
+            <div style="display: flex; justify-content: space-between; margin: 15px 0;">
+                <div style="width: 48%; border: 2px solid #e2e8f0; border-radius: 15px; padding: 15px; text-align: center;">
+                    <span style="font-size: 10pt; color: #64748b;">المؤشر العام ISA2</span><br>
+                    <b id="pdf-isa" style="font-size: 20pt; color: #2563eb;"></b>
+                </div>
+                <div style="width: 48%; border: 2px solid #e2e8f0; border-radius: 15px; padding: 15px; text-align: center;">
+                    <span style="font-size: 10pt; color: #64748b;">إجمالي المتعلمين</span><br>
+                    <b id="pdf-total" style="font-size: 20pt; color: #1e293b;"></b>
+                </div>
+            </div>
+
+            <div class="pdf-section-title">ثانياً: مبيان التحكم في الكفايات و توزيع الميزات  </div>
+            <div id="pdf-chart-img" style="width: 100%; height: 280px; margin-top: 10px; border: 1px solid #f1f5f9;"></div>
+
+
+            <div id="pdf-pie-img" style="width: 100%; height: 250px; text-align: center; margin-top: 100px;"></div>
+        </div>
+
+        <div class="pdf-page" id="pdf-p2">
+            <div class="pdf-header"><h1 style="color: #059669; font-size: 18pt;">🏆 لائحة المتفوقين (الفئة A و B)</h1></div>
+            <table class="pdf-table" id="pdf-top-table">
+                <thead><tr><th style="width:10%">الترتيب</th><th style="width:60%">الاسم الكامل</th><th style="width:15%">المعدل</th><th style="width:15%">الميزة</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <div class="pdf-page" id="pdf-p3">
+            <div class="pdf-header"><h1 style="color: #dc2626; font-size: 18pt;">🚩 لائحة المتعثرين (الفئة C و D)</h1></div>
+            <div style="background: #fff1f2; padding: 10px; border-right: 4px solid #dc2626; margin-bottom: 15px; font-size: 10pt;">
+                هذه اللائحة تضم المتعلمين الذين يحتاجون إلى خطة دعم استدراكي فورية بناءً على نتائج التقويم.
+            </div>
+            <table class="pdf-table" id="pdf-fail-table">
+                <thead><tr><th style="width:10%">#</th><th style="width:60%">الاسم الكامل</th><th style="width:15%">المعدل</th><th style="width:15%">الميزة</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        Chart.register(ChartDataLabels);
+        let students = []; let compData = {}; let charts = {};
+
+        document.getElementById('fileInput').addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files); if(!files.length) return;
+            students = []; compData = {}; let foundSubj = "";
+
+            for (let f of files) {
+                const buffer = await f.arrayBuffer();
+                const wb = XLSX.read(buffer, {type: 'array'});
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(ws, {header: 1, defval: ''});
+
+                rows.forEach(r => {
+                    let sIdx = r.indexOf("المادة:");
+                    if(sIdx !== -1 && r[sIdx+1]) foundSubj = r[sIdx+1];
+                });
+
+                let hIdx = rows.findIndex(r => r.includes("الكفايات"));
+                if(hIdx === -1) continue;
+                const headers = rows[hIdx];
+                const symCol = headers.indexOf("الرمز");
+                const startCol = headers.findIndex((c, i) => i > 3 && c !== "");
+
+                for(let i = hIdx + 1; i < rows.length; i++) {
+                    let s = rows[i][symCol]; if(!s) continue;
+                    let sc = [];
+                    for(let j = startCol; j < headers.length; j++) {
+                        let v = parseFloat(rows[i][j]); if(!isNaN(v)) sc.push(v);
+                    }
+                    if(sc.length > 0) {
+                        if(!compData[s]) compData[s] = { sum: 0, count: 0 };
+                        compData[s].sum += (sc.reduce((a,b)=>a+b,0)/sc.length);
+                        compData[s].count += 1;
+                    }
+                }
+
+                for(let j = startCol; j < headers.length; j++) {
+                    let n = headers[j]; if(!n || n.includes("المجموع")) continue;
+                    let sc = [];
+                    for(let i = hIdx + 1; i < rows.length; i++) {
+                        let v = parseFloat(rows[i][j]); if(!isNaN(v)) sc.push(v);
+                    }
+                    if(sc.length > 0) {
+                        let a = sc.reduce((a,b)=>a+b,0)/sc.length;
+                        students.push({ name: n, avg: parseFloat(a.toFixed(2)), level: (a>=8?'A':a>=6?'B':a>=4?'C':'D') });
+                    }
+                }
+            }
+            updateUI(foundSubj || "الرياضيات");
+        });
+
+        function updateUI(subj) {
+            document.getElementById('mainDashboard').classList.remove('hidden');
+            document.getElementById('downloadPdfBtn').classList.remove('hidden');
+            document.getElementById('subjName').innerText = subj;
+            document.getElementById('pdf-subj-display').innerText = "المادة: " + subj;
+
+            const nA = students.filter(s => s.level==='A').length;
+            const nB = students.filter(s => s.level==='B').length;
+            const nC = students.filter(s => s.level==='C').length;
+            const nD = students.filter(s => s.level==='D').length;
+            const total = students.length;
+            const isa = 0.8 * ((3*(nA/total*100) + 2*(nB/total*100) + 1*(nC/total*100))/3);
+
+            document.getElementById('isaVal').innerText = isa.toFixed(2) + "%";
+            document.getElementById('countVal').innerText = total;
+            document.getElementById('aRate').innerText = (nA/total*100).toFixed(1) + "%";
+
+            const labels = Object.keys(compData);
+            const dataVals = labels.map(l => (compData[l].sum / compData[l].count).toFixed(2));
+            
+            if(charts.comp) charts.comp.destroy();
+            charts.comp = new Chart(document.getElementById('compChart'), {
+                type: 'bar',
+                data: { labels, datasets: [{ label: 'مستوى التحكم', data: dataVals, backgroundColor: dataVals.map(v => v<5?'#ef4444':'#3b82f6'), borderRadius: 8 }] },
+                options: { maintainAspectRatio: false, plugins: { datalabels: { anchor: 'end', align: 'top', font: { weight: 'bold' } } } }
+            });
+
+            if(charts.pie) charts.pie.destroy();
+            charts.pie = new Chart(document.getElementById('pieChart'), {
+                type: 'doughnut',
+                data: { labels: ['A','B','C','D'], datasets: [{ data: [nA,nB,nC,nD], backgroundColor: ['#10b981','#3b82f6','#f59e0b','#ef4444'] }] },
+                options: { maintainAspectRatio: false, plugins: { datalabels: { color: '#fff', font: { weight: 'bold', size: 14 } } } }
+            });
+
+            const sorted = [...students].sort((a,b) => b.avg - a.avg);
+            document.getElementById('pdf-isa').innerText = isa.toFixed(2) + "%";
+            document.getElementById('pdf-total').innerText = total;
+
+            document.querySelector('#ui-top-table tbody').innerHTML = sorted.filter(s => s.level==='A' || s.level==='B').map(s => `<tr><td>${s.name}</td><td>${s.avg}</td><td><span class="badge badge-${s.level}">${s.level}</span></td></tr>`).join('');
+            document.querySelector('#ui-fail-table tbody').innerHTML = sorted.filter(s => s.level==='C' || s.level==='D').map(s => `<tr><td>${s.name}</td><td>${s.avg}</td><td><span class="badge badge-${s.level}">${s.level}</span></td></tr>`).join('');
+            
+            document.querySelector('#pdf-top-table tbody').innerHTML = sorted.filter(s => s.level==='A' || s.level==='B').map((s,i) => `<tr><td>${i+1}</td><td>${s.name}</td><td>${s.avg}</td><td>${s.level}</td></tr>`).join('');
+            document.querySelector('#pdf-fail-table tbody').innerHTML = sorted.filter(s => s.level==='C' || s.level==='D').map((s,i) => `<tr><td>${i+1}</td><td>${s.name}</td><td>${s.avg}</td><td>${s.level}</td></tr>`).join('');
+        }
+
+        document.getElementById('downloadPdfBtn').addEventListener('click', () => {
+            document.getElementById('pdf-chart-img').innerHTML = `<img src="${charts.comp.toBase64Image()}" style="width:100%; height:auto;">`;
+            document.getElementById('pdf-pie-img').innerHTML = `<img src="${charts.pie.toBase64Image()}" style="width:75%; margin:auto;">`;
+
+            const element = document.getElementById('pdf-content');
+            element.style.display = 'block';
+
+            const opt = {
+                margin: 0,
+                filename: 'تقرير_ISA2_لوائح التلاميذ .pdf',
+                image: { type: 'jpeg', quality: 1.0 },
+                html2canvas: { scale: 2, useCORS: true },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                pagebreak: { mode: 'css' }
+            };
+
+            html2pdf().set(opt).from(element).save().then(() => {
+                element.style.display = 'none';
+            });
+        });
+    </script>
+</body>
+</html>
